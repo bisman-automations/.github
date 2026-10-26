@@ -37,7 +37,12 @@
 #   listed. When neither exists the commit list is left out with a warning
 #   instead of failing. Tags are never moved.
 # - Drafts this workflow made for other versions are removed (they carry a
-#   hidden marker). Drafts made by hand are never touched.
+#   hidden marker). Drafts made by hand are never touched. A draft this
+#   workflow already untagged (its name is still the tag and its body still
+#   has the marker) is adopted and retagged, not replaced.
+# - Updating a draft always sends tag_name. Omitting it makes GitHub rewrite
+#   the pending tag to untagged-<id>, after which an upload by tag fails
+#   with "release not found". The zip is uploaded to the release id instead.
 # - Versions containing a, b or rc (for example 1.4.0b1) are marked pre-release.
 
 name: Home Assistant integration draft release
@@ -216,13 +221,22 @@ jobs:
           set -euo pipefail
           body=$(cat body.md)
 
-          draft_id=$(jq -r --arg t "$TAG" '[.[] | select(.draft and .tag_name == $t)][0].id // empty' releases.json)
+          # Adopt this version's draft. A previous run may already have untagged
+          # it: a PATCH that omits tag_name makes GitHub rewrite the pending tag
+          # to untagged-<id>, while the name stays $TAG and the body still
+          # carries this workflow's marker. Treat that as the same draft so we
+          # retag it instead of opening a second one.
+          draft_id=$(jq -r --arg t "$TAG" --arg m "$MARKER" '[ .[] | select(.draft and ( .tag_name == $t or (.name == $t and ((.body // "") | contains($m))) )) ][0].id // empty' releases.json)
           if [ -n "$draft_id" ]; then
+            # Always send tag_name. Leaving it out is what rewrites the pending
+            # tag to untagged-<id>; uploading the zip by tag then fails with
+            # "release not found".
             gh api -X PATCH "repos/${REPO}/releases/${draft_id}" \
-              -f name="$TAG" -f target_commitish="$SHA" -f body="$body" \
+              -f tag_name="$TAG" -f name="$TAG" -f target_commitish="$SHA" -f body="$body" \
               -F draft=true -F prerelease="$PRERELEASE" >/dev/null
             echo "Updated draft ${TAG}"
           else
+            # Keep the id. The zip is attached to this release, not looked up by tag.
             draft_id=$(gh api -X POST "repos/${REPO}/releases" \
               -f tag_name="$TAG" -f name="$TAG" -f target_commitish="$SHA" -f body="$body" \
               -F draft=true -F prerelease="$PRERELEASE" -q .id)
@@ -230,15 +244,34 @@ jobs:
           fi
 
           if [ "$ZIP" = "true" ]; then
-            # --clobber replaces the zip from an earlier run of this draft.
-            gh release upload "$TAG" "${DOMAIN}.zip" --repo "$REPO" --clobber
+            # Upload by release id. `gh release upload "$TAG"` looks the release
+            # up by tag and fails with "release not found" once the pending tag
+            # has been rewritten to untagged-<id>. The upload endpoint also
+            # rejects a second asset of the same name, so delete an existing
+            # <domain>.zip on this release first.
+            gh api "repos/${REPO}/releases/${draft_id}" > draft.json
+            asset_id=$(jq -r --arg n "${DOMAIN}.zip" '[.assets[] | select(.name == $n)][0].id // empty' draft.json)
+            if [ -n "$asset_id" ]; then
+              gh api -X DELETE "repos/${REPO}/releases/assets/${asset_id}"
+              echo "Removed existing ${DOMAIN}.zip"
+            fi
+            # upload_url ends with the {?name,label} URI template; the POST
+            # wants the bare assets URL plus ?name=.
+            upload_url=$(jq -r '.upload_url | sub("\\{\\?name,label\\}$"; "")' draft.json)
+            gh api -X POST "${upload_url}?name=${DOMAIN}.zip" \
+              -H "Content-Type: application/zip" \
+              --input "${DOMAIN}.zip" >/dev/null
             echo "Attached ${DOMAIN}.zip"
           fi
 
           # Remove drafts this workflow made earlier for a different version
           # (after the manifest version was bumped). Hand-made drafts stay.
-          jq -r --arg t "$TAG" --arg m "$MARKER" \
-            '.[] | select(.draft and .tag_name != $t and ((.body // "") | contains($m))) | .id' releases.json |
+          # releases.json is the snapshot from before this update, so the draft
+          # we just patched is still in it. One this workflow had already
+          # untagged has tag_name != $TAG and would match; never delete the
+          # draft we just kept.
+          jq -r --arg t "$TAG" --arg m "$MARKER" --argjson keep "$draft_id" \
+            '.[] | select(.draft and .id != $keep and .tag_name != $t and ((.body // "") | contains($m))) | .id' releases.json |
             while read -r id; do
               gh api -X DELETE "repos/${REPO}/releases/${id}"
               echo "Removed stale draft ${id}"
