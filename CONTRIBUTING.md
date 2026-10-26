@@ -36,20 +36,23 @@ instead.
 
    CI also runs the tests on the oldest supported Home Assistant (pinned in
    `requirements_test_min.txt`), hassfest, the HACS checks and a standards check.
-5. Add an entry under `## [Unreleased]` in `CHANGELOG.md`
-   ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/)), and update the
-   README if users will notice the change.
+5. In the release commit, write the notes under a new
+   `## [X.Y.Z] - YYYY-MM-DD` heading in `CHANGELOG.md` and bump
+   `manifest.json` in that same commit. There is no `## [Unreleased]`
+   section ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/)).
+   Update the README if users will notice the change.
 6. If you changed any text in `strings.json`, make the same change in
    `translations/en.json`.
 7. Open a pull request and fill in the checklist.
 
 ## How releases work
 
-The maintainer bumps the version in `manifest.json` and dates the CHANGELOG
-section. Every push to `main` refreshes a draft GitHub release with those notes
-and the integration zip; the maintainer reviews and publishes it, which creates
-the tag and makes the update show in HACS. Versions follow
-[Semantic Versioning](https://semver.org).
+The release commit bumps the version in `manifest.json` and adds a dated
+`## [X.Y.Z] - YYYY-MM-DD` section to `CHANGELOG.md` with that release's notes.
+There is no `## [Unreleased]` section. Every push to `main` refreshes a draft
+GitHub release from that version's section and the integration zip; the
+maintainer reviews and publishes it, which creates the tag and makes the
+update show in HACS. Versions follow [Semantic Versioning](https://semver.org).
 
 ## Shared tooling
 

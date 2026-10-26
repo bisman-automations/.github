@@ -14,8 +14,10 @@
 #
 # The release process (the same in every repo)
 # --------------------------------------------
-# 1. Bump "version" in custom_components/<domain>/manifest.json and move the
-#    CHANGELOG.md "## [Unreleased]" entries into "## [X.Y.Z] - YYYY-MM-DD".
+# 1. In the release commit, bump "version" in
+#    custom_components/<domain>/manifest.json and write the notes under a new
+#    CHANGELOG.md heading "## [X.Y.Z] - YYYY-MM-DD". There is no
+#    "## [Unreleased]" section.
 # 2. Push to main.
 # 3. This workflow creates (or refreshes) a DRAFT release vX.Y.Z:
 #      - notes: that version's CHANGELOG.md section,
@@ -27,8 +29,10 @@
 # Details
 # -------
 # - When manifest.json's version is already published (a push with no version
-#   bump), the draft is for the next patch version and uses the
-#   "## [Unreleased]" notes, with a notice to bump manifest.json first.
+#   bump), the draft is for the next patch version. Its notes would come from
+#   that next version's "## [X.Y.Z] - YYYY-MM-DD" section, which is written
+#   in the release commit, so the draft says the section is missing and asks
+#   for the bump. It does not read an [Unreleased] section.
 # - Previous releases whose tag isn't in main's history (for example after a
 #   history rewrite) are matched to the commit on main with the exact same
 #   files, so the commit list and compare link still work. Failing that, they
@@ -93,12 +97,17 @@ jobs:
 
           gh api --paginate "repos/${REPO}/releases?per_page=100" | jq -s 'add // []' > releases.json
 
-          # Already published: draft the next patch from the Unreleased notes.
+          # Already published: there is no [Unreleased] section to draft from.
+          # The next version's notes are written under ## [X.Y.Z] - YYYY-MM-DD
+          # in the release commit that also bumps manifest.json. Until that
+          # commit, draft the next patch and let the notes step say the
+          # section is missing.
           if jq -e --arg t "$tag" 'any(.[]; .tag_name == $t and (.draft | not))' releases.json >/dev/null; then
             IFS=. read -r major minor patch <<<"${version%%[-+ab]*}"
-            tag="v${major}.${minor}.$((patch + 1))"
-            notes_section="Unreleased"
-            echo "::notice::${version} is already released, so this drafts ${tag} from the Unreleased notes. Bump manifest.json and date the CHANGELOG.md section before publishing."
+            next="${major}.${minor}.$((patch + 1))"
+            tag="v${next}"
+            notes_section="$next"
+            echo "::notice::${version} is already released, so this drafts ${tag}. Add '## [${next}] - YYYY-MM-DD' and bump manifest.json in the release commit. There is no [Unreleased] section to take notes from."
           fi
 
           prerelease=false
@@ -120,7 +129,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          # 1. This version's CHANGELOG.md section (or Unreleased).
+          # 1. This version's CHANGELOG.md section (## [X.Y.Z], never Unreleased).
           python3 - <<'PY'
           import os
           import re

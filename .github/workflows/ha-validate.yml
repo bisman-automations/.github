@@ -17,8 +17,9 @@
 #            nothing still runs HACS.
 # standards  scripts/check_repo.py from this .github repo: the shared layout
 #            every repo follows (workflow callers, Dependabot, CODEOWNERS,
-#            Keep a Changelog CHANGELOG.md with a section for the manifest
-#            version, translations/en.json matching strings.json, README badges
+#            Keep a Changelog CHANGELOG.md with a dated section for the
+#            manifest version and no [Unreleased] heading,
+#            translations/en.json matching strings.json, README badges
 #            and My buttons, CLAUDE.md with the shared rules, LICENSE, and so
 #            on). Its output lists anything out of step with the templates.
 

@@ -48,7 +48,7 @@ custom_components/<domain>/
   brand/                   icon.png, icon@2x.png, dark_icon.png, dark_icon@2x.png
 tests/
 AGENTS.md                  points to CLAUDE.md
-CHANGELOG.md               Keep a Changelog 1.1.0
+CHANGELOG.md               Keep a Changelog 1.1.0, no [Unreleased] section
 CLAUDE.md                  repo notes + the shared rules block
 LICENSE                    full license text (MIT or Apache 2.0)
 README.md                  badges, My buttons, standard sections
@@ -156,9 +156,12 @@ The same process in every repository. Nothing in CI publishes a release or
 pushes a tag.
 
 1. In one commit, `Release X.Y.Z`: bump `version` in
-   `custom_components/<domain>/manifest.json` and move the CHANGELOG
-   `## [Unreleased]` entries into `## [X.Y.Z] - YYYY-MM-DD`, with the compare
-   links at the bottom.
+   `custom_components/<domain>/manifest.json` and write the notes directly
+   under a new `## [X.Y.Z] - YYYY-MM-DD` heading in `CHANGELOG.md`, with
+   that version's compare link at the bottom. There is no `## [Unreleased]`
+   section and no `[Unreleased]:` compare link. Do not park entries under a
+   holding heading and move them at release time. The release commit is
+   where the heading and the entries are written.
 2. Push to `main`.
 3. **Draft release** creates or refreshes the DRAFT release `vX.Y.Z`:
    that version's CHANGELOG section, the commits since the previous release,
@@ -168,8 +171,11 @@ pushes a tag.
 5. **Release check** runs on the new tag and confirms it matches
    `manifest.json`, has a dated CHANGELOG section, and is on `main`.
 
-Pushes without a version bump keep a draft for the next patch version from
-the `Unreleased` notes, with a notice to bump `manifest.json` first.
+A push that does not bump the version (the manifest version is already
+published) has no new changelog section. Draft release opens a draft for
+the next patch and says the `## [X.Y.Z] - YYYY-MM-DD` heading is missing
+until the release commit adds it and bumps `manifest.json`. It does not
+read an `[Unreleased]` section.
 
 **Tags are never moved, deleted or re-created**, and history on `main` is
 never rewritten. Two repositories have a release tag that isn't on `main`
@@ -192,8 +198,11 @@ drops a release people use) is called out under `Changed`.
   `Setup`, `Troubleshooting`, `Development` and `License` sections. Start
   from `templates/repo/README.md`.
 - **CHANGELOG.md**: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/),
-  `## [Unreleased]` at the top, dated sections, only the standard `###`
-  types, compare links at the bottom, and a section for the manifest version.
+  with no `## [Unreleased]` section. The release commit adds
+  `## [X.Y.Z] - YYYY-MM-DD` and that version's entries, only the standard
+  `###` types, a compare link for each version at the bottom, and a section
+  for the manifest version. A `## [Unreleased]` heading fails the standards
+  check.
 - **CLAUDE.md**: notes for Claude and other coding agents (layout,
   conventions, checks, repository-specific release notes), ending with the
   shared rules block copied from `templates/CLAUDE.shared.md`. **AGENTS.md**

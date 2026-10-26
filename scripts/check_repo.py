@@ -377,9 +377,15 @@ def check_changelog(repo: Path, report: Report, version: str | None) -> None:
             "CHANGELOG.md",
             "missing the Keep a Changelog 1.1.0 / Semantic Versioning intro",
         )
-    if "## [Unreleased]" not in lines:
-        report.error("CHANGELOG.md", "missing '## [Unreleased]'")
+    # Entries are written under a dated version heading in the release commit.
+    # An Unreleased heading is not required, and one that is present is wrong.
     headings = re.findall(r"^## \[([^\]]+)\](.*)$", text, re.M)
+    if any(name == "Unreleased" for name, _ in headings):
+        report.error(
+            "CHANGELOG.md",
+            "remove '## [Unreleased]'; put new entries under "
+            "'## [x.y.z] - YYYY-MM-DD' in the release commit",
+        )
     for name, rest in headings:
         if name == "Unreleased":
             continue
@@ -387,8 +393,12 @@ def check_changelog(repo: Path, report: Report, version: str | None) -> None:
             report.error("CHANGELOG.md", f"'## [{name}]' needs ' - YYYY-MM-DD'")
         if not re.search(rf"^\[{re.escape(name)}\]: https://github\.com/", text, re.M):
             report.error("CHANGELOG.md", f"no compare link for [{name}] at the bottom")
-    if not re.search(r"^\[Unreleased\]: https://github\.com/.+/compare/", text, re.M):
-        report.error("CHANGELOG.md", "no [Unreleased] compare link at the bottom")
+    if re.search(r"^\[Unreleased\]:", text, re.M):
+        report.error(
+            "CHANGELOG.md",
+            "remove the [Unreleased] compare link; compare links belong on "
+            "dated version sections",
+        )
     allowed = {"Added", "Changed", "Deprecated", "Removed", "Fixed", "Security"}
     for heading in sorted(set(re.findall(r"^### (.+)$", text, re.M)) - allowed):
         report.error(

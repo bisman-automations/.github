@@ -10,8 +10,7 @@
 - [ ] `ruff check .` and `ruff format --check .` pass
 - [ ] `pytest` passes (and `node --test tests/*.mjs` if the panel changed)
 - [ ] Tests added or updated for the change
-- [ ] `CHANGELOG.md` has an entry under `## [Unreleased]` (or the new version)
-- [ ] `manifest.json` version bumped, if this is releasing
+- [ ] Release commit adds `## [x.y.z] - YYYY-MM-DD` in `CHANGELOG.md` (no `## [Unreleased]` section) and bumps `manifest.json`
 - [ ] `README.md` updated if behavior, options, entities or services changed
 - [ ] `strings.json` and `translations/en.json` updated together, if text changed
 - [ ] No personal details (names, addresses, account or device identifiers, real entity IDs)

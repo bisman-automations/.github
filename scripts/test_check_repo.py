@@ -262,6 +262,22 @@ class CheckRepoTest(unittest.TestCase):
         self.edit("CHANGELOG.md", "### Added", "### New")
         self.assert_error("'### New' isn't a Keep a Changelog type")
 
+    def test_changelog_rejects_unreleased_heading(self) -> None:
+        self.edit(
+            "CHANGELOG.md",
+            "## [1.0.0] - 2026-10-26",
+            "## [Unreleased]\n\n## [1.0.0] - 2026-10-26",
+        )
+        self.assert_error("remove '## [Unreleased]'")
+
+    def test_changelog_rejects_unreleased_link(self) -> None:
+        self.edit(
+            "CHANGELOG.md",
+            "[1.0.0]:",
+            "[Unreleased]: https://github.com/bisman-automations/ha-demo/compare/v1.0.0...HEAD\n[1.0.0]:",
+        )
+        self.assert_error("remove the [Unreleased] compare link")
+
     # README -----------------------------------------------------------------
 
     def test_readme_hacs_my_button(self) -> None:
