@@ -11,6 +11,10 @@
 # hacs       The HACS action with every check on (brands, description, topics,
 #            information, issues, archived, images). Set `hacs-ignore` only for a
 #            check that genuinely can't pass, and say why in the caller.
+#            Set `hacs: false` only for a private repository: hacs/action
+#            refuses private repos before any check runs, and hacs-ignore
+#            cannot skip that. The default is true, so a caller that passes
+#            nothing still runs HACS.
 # standards  scripts/check_repo.py from this .github repo: the shared layout
 #            every repo follows (workflow callers, Dependabot, CODEOWNERS,
 #            Keep a Changelog CHANGELOG.md with a section for the manifest
@@ -23,6 +27,13 @@ name: Home Assistant integration validation
 on:
   workflow_call:
     inputs:
+      hacs:
+        description: >-
+          Run the HACS action. Set false only for a private repository:
+          hacs/action refuses private repos before any check runs, and
+          hacs-ignore cannot skip that.
+        type: boolean
+        default: true
       hacs-ignore:
         description: >-
           Space-separated HACS checks to skip (see the HACS action docs).
@@ -45,6 +56,7 @@ jobs:
       - uses: home-assistant/actions/hassfest@master
 
   hacs:
+    if: inputs.hacs
     runs-on: ubuntu-latest
     steps:
       - uses: hacs/action@main

@@ -137,8 +137,18 @@ Mondays.
   checks. The published hassfest rejects `categories` in `manifest.json` and
   Pillow in `requirements`, so neither is used.
 - **HACS**, every check on. `hacs-ignore` is only for a check that genuinely
-  can't pass, with a comment in the caller.
+  can't pass, with a comment in the caller. `hacs` defaults to `true`. Set
+  it `false` only for a private repository: hacs/action refuses private repos
+  before any check runs, and `hacs-ignore` cannot skip that.
 - **standards**, `scripts/check_repo.py` against this repository's `main`.
+
+The caller passes only what differs from the defaults:
+
+| Input | Default | Use |
+| --- | --- | --- |
+| `hacs` | `true` | Run the HACS action. Set `false` only for a private repository: hacs/action refuses private repos before any check runs, and `hacs-ignore` cannot skip that. |
+| `hacs-ignore` | | Space-separated HACS checks to skip. Empty runs them all. |
+| `standards` | `true` | Run `scripts/check_repo.py`. |
 
 ### Releases
 
