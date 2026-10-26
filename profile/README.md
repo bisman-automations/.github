@@ -41,6 +41,27 @@ Projects under this organization are typically:
 - Built around practical automation use cases
 - Intended to improve comfort, efficiency, and insight inside the home
 
+## Integrations
+
+Every integration installs through [HACS](https://hacs.xyz/) as a custom repository and is set up from **Settings → Devices & services**.
+
+| Integration | What it does | Home Assistant |
+| --- | --- | --- |
+| [Appliance Live Activity](https://github.com/bisman-automations/ha-appliance-live-activity) | Live Activities (iOS) and Live Updates (Android) for washers, dryers, dishwashers, ovens and other appliances. | 2026.7+ |
+| [Button Actions](https://github.com/bisman-automations/ha-button-actions) | Short, double and long presses on Lutron Pico and other button remotes, mapped to any action in the UI. | 2025.11+ |
+| [Daily Routine](https://github.com/bisman-automations/ha-daily-routine) | Room-by-room, safety-aware daily routines from a sidebar panel. | 2026.9+ |
+| [Ford Assistant](https://github.com/bisman-automations/ha-ford-assistant) | Ready-to-use features (remote start, doors, alerts, climate) on top of the Ford integration. | 2026.2+ |
+| [Holiday Lighting](https://github.com/bisman-automations/ha-holiday-lighting) | Holiday color themes rotated across your existing lights. | 2026.2+ |
+| [HomeKit Extended](https://github.com/bisman-automations/ha-homekit-extended) | HomeKit accessories beyond what the built-in HomeKit Bridge offers. | 2025.3+ |
+| [Matter Bridge](https://github.com/bisman-automations/ha-matter-bridge) | Home Assistant Matter Hub as an integration, with a device for each bridge. | 2025.3+ |
+| [Montana-Dakota Utilities](https://github.com/bisman-automations/ha-mdu) | Monthly electric and gas usage and billing from MDU. | 2025.11+ |
+| [Media Mgmt](https://github.com/bisman-automations/ha-media-mgmt) | Parental controls and listening analytics for speakers. | 2026.3+ |
+| [Rain Bird Extended](https://github.com/bisman-automations/ha-rainbird-extended) | Irrigation monitoring and runtime tracking on top of the built-in Rain Bird integration. | 2026.9+ |
+| [TCL Android TV Remote](https://github.com/bisman-automations/ha-tcl-android-tv-remote) | Control for TCL Google TV and Android TV sets. | 2025.8+ |
+| [TV Mgmt](https://github.com/bisman-automations/ha-tv-mgmt) | Parental controls for smart TVs: one input, daily screen time and bedtime. | 2026.3+ |
+
+How the repositories are built, tested and released is written down in [bisman-automations/.github](https://github.com/bisman-automations/.github).
+
 ## Learn more
 
 Visit the organization page here:
