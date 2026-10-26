@@ -1,0 +1,6 @@
+# The oldest Home Assistant this integration supports (hacs.json: YYYY.M.0).
+# pytest-homeassistant-custom-component 0.13.NNN is Home Assistant YYYY.M.P,
+# the newest harness release of that month. It needs Python 3.1X (CI
+# python-min). Raise this together with hacs.json; see CLAUDE.md.
+pytest-homeassistant-custom-component==0.13.NNN
+# Test-only libraries, pinned to what that Home Assistant expected, go below.

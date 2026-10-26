@@ -1,0 +1,72 @@
+# Reusable validation workflow for every bisman-automations Home Assistant
+# integration. Called from each repo's .github/workflows/validate.yml:
+#
+#   jobs:
+#     validate:
+#       uses: bisman-automations/.github/.github/workflows/ha-validate.yml@main
+#
+# hassfest   Home Assistant's own manifest, translation and services checks.
+#            Note: the published hassfest rejects a `categories` key in
+#            manifest.json and Pillow in `requirements`, so neither is used.
+# hacs       The HACS action with every check on (brands, description, topics,
+#            information, issues, archived, images). Set `hacs-ignore` only for a
+#            check that genuinely can't pass, and say why in the caller.
+# standards  scripts/check_repo.py from this .github repo: the shared layout
+#            every repo follows (workflow callers, Dependabot, CODEOWNERS,
+#            Keep a Changelog CHANGELOG.md with a section for the manifest
+#            version, translations/en.json matching strings.json, README badges
+#            and My buttons, CLAUDE.md with the shared rules, LICENSE, and so
+#            on). Its output lists anything out of step with the templates.
+
+name: Home Assistant integration validation
+
+on:
+  workflow_call:
+    inputs:
+      hacs-ignore:
+        description: >-
+          Space-separated HACS checks to skip (see the HACS action docs).
+          Empty runs them all, which is the standard.
+        type: string
+        default: ""
+      standards:
+        description: Run the bisman-automations repository standards check.
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  hassfest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: home-assistant/actions/hassfest@master
+
+  hacs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: hacs/action@main
+        with:
+          category: integration
+          ignore: ${{ inputs.hacs-ignore }}
+
+  standards:
+    if: inputs.standards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: repo
+      # The checker lives next to this workflow, in the org's .github repo.
+      - uses: actions/checkout@v7
+        with:
+          repository: bisman-automations/.github
+          ref: main
+          path: org
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - name: Check the repository against the bisman-automations standards
+        run: python org/scripts/check_repo.py repo --github --name "${{ github.event.repository.name }}"

@@ -1,0 +1,64 @@
+# Reusable check for a published release. Called from each repo's
+# .github/workflows/release-check.yml on tag pushes (v*):
+#
+#   on:
+#     push:
+#       tags: ["v*"]
+#   jobs:
+#     release-check:
+#       uses: bisman-automations/.github/.github/workflows/ha-release-check.yml@main
+#
+# Releases are published by hand from the draft that ha-draft-release.yml keeps
+# up to date, and publishing creates the tag. This then confirms the tag is
+# what it should be:
+#   - the tag (vX.Y.Z) equals manifest.json's version,
+#   - CHANGELOG.md has a dated "## [X.Y.Z] - YYYY-MM-DD" section,
+#   - the tagged commit is on main (so history rewrites can't orphan a release,
+#     which is what broke drafting in ha-button-actions in October 2026).
+# It runs after the fact and can't block the release; a red run means the
+# release should be fixed by publishing a corrected patch release.
+
+name: Home Assistant integration release check
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  release-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history, so we can confirm the tag is on main.
+          fetch-depth: 0
+      - name: Tag, manifest.json and CHANGELOG.md agree, and the tag is on main
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+          manifest_version=$(jq -r .version custom_components/*/manifest.json | head -n1)
+          status=0
+
+          if [ "$version" != "$manifest_version" ]; then
+            echo "::error::Tag ${tag} doesn't match manifest.json version ${manifest_version}."
+            status=1
+          fi
+
+          if ! grep -Eq "^## \[${version//./\\.}\] - [0-9]{4}-[0-9]{2}-[0-9]{2}\$" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no dated '## [${version}] - YYYY-MM-DD' section."
+            status=1
+          fi
+
+          git fetch --quiet origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::${tag} (${GITHUB_SHA}) isn't on main. Releases must be published from main."
+            status=1
+          fi
+
+          if [ "$status" -eq 0 ]; then
+            echo "${tag} matches manifest.json and CHANGELOG.md, and is on main."
+          fi
+          exit "$status"

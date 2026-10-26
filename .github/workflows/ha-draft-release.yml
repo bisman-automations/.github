@@ -1,0 +1,253 @@
+# Reusable "draft release" workflow for every bisman-automations Home Assistant
+# integration. Called from each repo's .github/workflows/draft-release.yml on
+# every push to main:
+#
+#   on:
+#     push:
+#       branches: [main]
+#     workflow_dispatch:
+#   permissions:
+#     contents: write
+#   jobs:
+#     draft:
+#       uses: bisman-automations/.github/.github/workflows/ha-draft-release.yml@main
+#
+# The release process (the same in every repo)
+# --------------------------------------------
+# 1. Bump "version" in custom_components/<domain>/manifest.json and move the
+#    CHANGELOG.md "## [Unreleased]" entries into "## [X.Y.Z] - YYYY-MM-DD".
+# 2. Push to main.
+# 3. This workflow creates (or refreshes) a DRAFT release vX.Y.Z:
+#      - notes: that version's CHANGELOG.md section,
+#      - a "Commits" list since the previous release, and a compare link,
+#      - <domain>.zip, the integration folder's contents, for manual installs.
+# 4. Donavan reviews the draft and publishes it. Publishing creates the tag;
+#    nothing here ever publishes a release or pushes a tag.
+#
+# Details
+# -------
+# - When manifest.json's version is already published (a push with no version
+#   bump), the draft is for the next patch version and uses the
+#   "## [Unreleased]" notes, with a notice to bump manifest.json first.
+# - Previous releases whose tag isn't in main's history (for example after a
+#   history rewrite) are matched to the commit on main with the exact same
+#   files, so the commit list and compare link still work. Failing that, they
+#   are matched to the amended copy of the tagged commit (same author, author
+#   date and subject), with a warning that the amendment's own changes aren't
+#   listed. When neither exists the commit list is left out with a warning
+#   instead of failing. Tags are never moved.
+# - Drafts this workflow made for other versions are removed (they carry a
+#   hidden marker). Drafts made by hand are never touched.
+# - Versions containing a, b or rc (for example 1.4.0b1) are marked pre-release.
+
+name: Home Assistant integration draft release
+
+on:
+  workflow_call:
+    inputs:
+      zip-asset:
+        description: Attach <domain>.zip (the integration folder) to the draft.
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  draft:
+    runs-on: ubuntu-latest
+    concurrency:
+      # One draft update at a time per repository; never cancel one midway.
+      group: draft-release-${{ github.repository }}
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      SHA: ${{ github.sha }}
+      MARKER: "<!-- auto-draft-release -->"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history and tags, to list the commits since the last release.
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Work out the version to draft
+        id: version
+        run: |
+          set -euo pipefail
+          manifest=$(ls custom_components/*/manifest.json)
+          if [ "$(echo "$manifest" | wc -l)" -ne 1 ]; then
+            echo "::error::Expected exactly one custom_components/<domain>/manifest.json, found: ${manifest}"
+            exit 1
+          fi
+          domain=$(jq -r .domain "$manifest")
+          version=$(jq -r .version "$manifest")
+          tag="v${version}"
+          notes_section="$version"
+
+          gh api --paginate "repos/${REPO}/releases?per_page=100" | jq -s 'add // []' > releases.json
+
+          # Already published: draft the next patch from the Unreleased notes.
+          if jq -e --arg t "$tag" 'any(.[]; .tag_name == $t and (.draft | not))' releases.json >/dev/null; then
+            IFS=. read -r major minor patch <<<"${version%%[-+ab]*}"
+            tag="v${major}.${minor}.$((patch + 1))"
+            notes_section="Unreleased"
+            echo "::notice::${version} is already released, so this drafts ${tag} from the Unreleased notes. Bump manifest.json and date the CHANGELOG.md section before publishing."
+          fi
+
+          prerelease=false
+          if [[ "${tag#v}" =~ (a|b|rc)[0-9]*$ ]]; then prerelease=true; fi
+
+          {
+            echo "domain=${domain}"
+            echo "version=${version}"
+            echo "tag=${tag}"
+            echo "notes_section=${notes_section}"
+            echo "prerelease=${prerelease}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Drafting ${tag} for ${domain} (manifest.json ${version}, notes from CHANGELOG.md [${notes_section}])"
+
+      - name: Write the release notes
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          NOTES_SECTION: ${{ steps.version.outputs.notes_section }}
+        run: |
+          set -euo pipefail
+
+          # 1. This version's CHANGELOG.md section (or Unreleased).
+          python3 - <<'PY'
+          import os
+          import re
+          import sys
+
+          wanted = os.environ["NOTES_SECTION"]
+          lines = open("CHANGELOG.md", encoding="utf-8").read().splitlines()
+          heading = re.compile(r"^## \[(?P<name>[^\]]+)\]")
+          link_ref = re.compile(r"^\[[^\]]+\]:\s*\S+")
+          out, found = [], False
+          for line in lines:
+              match = heading.match(line)
+              if match:
+                  if found:
+                      break
+                  found = match.group("name") == wanted
+                  continue
+              if found and not link_ref.match(line):
+                  out.append(line)
+          text = "\n".join(out).strip()
+          if not found or not text:
+              print(f"::warning::CHANGELOG.md has no entries under [{wanted}]; the draft says so. Add them before publishing.")
+              text = f"_No CHANGELOG.md entries under [{wanted}] yet._"
+          open("notes.md", "w", encoding="utf-8").write(text + "\n")
+          PY
+
+          # 2. The previous published release, and where it sits on main.
+          previous=$(jq -r '[.[] | select((.draft | not) and (.prerelease | not))][0].tag_name // empty' releases.json)
+          base=""
+          if [ -n "$previous" ] && git rev-parse -q --verify "refs/tags/${previous}" >/dev/null; then
+            if git merge-base --is-ancestor "refs/tags/${previous}" "$SHA"; then
+              base="$previous"
+            else
+              # The tag isn't in main's history (history was rewritten after it
+              # was released). Find the commit on main with the same files.
+              tree=$(git rev-parse "refs/tags/${previous}^{tree}")
+              base=$(git log --format='%H %T' "$SHA" | awk -v t="$tree" '$2 == t { print $1; exit }')
+              if [ -n "$base" ]; then
+                echo "::notice::${previous} isn't in main's history; listing commits since ${base:0:7}, the commit on main with the same files."
+              else
+                # No identical files: look for the amended or rebased copy of
+                # the tagged commit (same author, author date and subject).
+                key=$(git log -1 --format='%ae%x09%at%x09%s' "refs/tags/${previous}")
+                base=$(git log --format='%H%x09%ae%x09%at%x09%s' "$SHA" |
+                  awk -F '\t' -v k="$key" '{ h = $1; sub(/^[^\t]*\t/, ""); if ($0 == k) { print h; exit } }')
+                if [ -n "$base" ]; then
+                  echo "::warning::${previous} isn't in main's history. ${base:0:7} on main is the same commit amended after the tag, so the commit list starts there; changes made by that amendment aren't listed. Check that CHANGELOG.md covers them."
+                else
+                  echo "::warning::${previous} isn't in main's history and no commit on main matches it, so the draft has no commit list. See the repository's CLAUDE.md."
+                fi
+              fi
+            fi
+          fi
+
+          {
+            cat notes.md
+            if [ -n "$base" ]; then
+              commits=$(git log --reverse --no-merges --format='- %s (%h)' "${base}..${SHA}")
+              if [ -n "$commits" ]; then
+                printf '\n### Commits\n\n%s\n' "$commits"
+              fi
+              printf '\n**Full changelog**: https://github.com/%s/compare/%s...%s\n' "$REPO" "$base" "$TAG"
+            fi
+            printf '\n%s\n' "$MARKER"
+          } > body.md
+          echo "----- release notes -----"
+          cat body.md
+
+      - name: Build the integration zip
+        if: inputs.zip-asset
+        env:
+          DOMAIN: ${{ steps.version.outputs.domain }}
+        run: |
+          set -euo pipefail
+          # The folder's contents at the zip's root, the layout HACS's
+          # zip_release uses: unzip into config/custom_components/<domain>/.
+          python3 - <<'PY'
+          import os
+          import pathlib
+          import zipfile
+
+          domain = os.environ["DOMAIN"]
+          root = pathlib.Path("custom_components") / domain
+          with zipfile.ZipFile(f"{domain}.zip", "w", zipfile.ZIP_DEFLATED) as zf:
+              for path in sorted(root.rglob("*")):
+                  if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc":
+                      zf.write(path, path.relative_to(root))
+          PY
+          python3 -m zipfile -l "${DOMAIN}.zip" | head -n 40
+
+      - name: Create or update the draft
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+          DOMAIN: ${{ steps.version.outputs.domain }}
+          ZIP: ${{ inputs.zip-asset }}
+        run: |
+          set -euo pipefail
+          body=$(cat body.md)
+
+          draft_id=$(jq -r --arg t "$TAG" '[.[] | select(.draft and .tag_name == $t)][0].id // empty' releases.json)
+          if [ -n "$draft_id" ]; then
+            gh api -X PATCH "repos/${REPO}/releases/${draft_id}" \
+              -f name="$TAG" -f target_commitish="$SHA" -f body="$body" \
+              -F draft=true -F prerelease="$PRERELEASE" >/dev/null
+            echo "Updated draft ${TAG}"
+          else
+            draft_id=$(gh api -X POST "repos/${REPO}/releases" \
+              -f tag_name="$TAG" -f name="$TAG" -f target_commitish="$SHA" -f body="$body" \
+              -F draft=true -F prerelease="$PRERELEASE" -q .id)
+            echo "Created draft ${TAG}"
+          fi
+
+          if [ "$ZIP" = "true" ]; then
+            # --clobber replaces the zip from an earlier run of this draft.
+            gh release upload "$TAG" "${DOMAIN}.zip" --repo "$REPO" --clobber
+            echo "Attached ${DOMAIN}.zip"
+          fi
+
+          # Remove drafts this workflow made earlier for a different version
+          # (after the manifest version was bumped). Hand-made drafts stay.
+          jq -r --arg t "$TAG" --arg m "$MARKER" \
+            '.[] | select(.draft and .tag_name != $t and ((.body // "") | contains($m))) | .id' releases.json |
+            while read -r id; do
+              gh api -X DELETE "repos/${REPO}/releases/${id}"
+              echo "Removed stale draft ${id}"
+            done
+
+          {
+            echo "### Draft ${TAG}"
+            echo
+            echo "Review and publish it at https://github.com/${REPO}/releases. Publishing creates the tag."
+            echo
+            cat body.md
+          } >> "$GITHUB_STEP_SUMMARY"

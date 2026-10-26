@@ -1,0 +1,28 @@
+# Organization-wide default feature request form (see bug_report.yml).
+name: Feature request
+description: Suggest something this integration could do
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like it to do?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why? How would you use it?
+      description: The problem it solves at home helps more than a design.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What do you do today instead?
+      description: An automation, a blueprint, another integration, or nothing.
+  - type: input
+    id: devices
+    attributes:
+      label: Devices or services involved
+      placeholder: "Apple TV 4K, Sonos One"

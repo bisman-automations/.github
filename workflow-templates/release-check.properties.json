@@ -1,0 +1,12 @@
+{
+  "name": "Home Assistant integration release check",
+  "description": "When a release is published, confirms its tag matches manifest.json and CHANGELOG.md and is on main.",
+  "iconName": "octicon home",
+  "categories": [
+    "Python"
+  ],
+  "filePatterns": [
+    "^hacs\\.json$",
+    "custom_components/.*/manifest\\.json$"
+  ]
+}

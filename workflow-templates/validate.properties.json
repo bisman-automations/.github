@@ -1,0 +1,12 @@
+{
+  "name": "Home Assistant integration validation",
+  "description": "hassfest, the HACS checks and the bisman-automations repository standards check.",
+  "iconName": "octicon home",
+  "categories": [
+    "Python"
+  ],
+  "filePatterns": [
+    "^hacs\\.json$",
+    "custom_components/.*/manifest\\.json$"
+  ]
+}

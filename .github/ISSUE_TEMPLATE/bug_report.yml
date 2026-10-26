@@ -1,0 +1,76 @@
+# Organization-wide default bug report form. It applies to every
+# bisman-automations repository that has no .github/ISSUE_TEMPLATE of its own
+# (by design, none do, so every repo asks the same questions).
+name: Bug report
+description: Something in this integration isn't working right
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Thanks for reporting a problem. Please check the
+        [open issues](../issues) first. Never paste passwords, tokens, pairing
+        codes, addresses or other personal details: diagnostics files already
+        leave out what they can, but look through anything you attach.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the sidebar app
+        2. Select ...
+        3. ...
+  - type: input
+    id: integration_version
+    attributes:
+      label: Integration version
+      description: HACS shows it, as does Settings > Devices & services > the integration.
+      placeholder: "1.2.0"
+    validations:
+      required: true
+  - type: input
+    id: ha_version
+    attributes:
+      label: Home Assistant version
+      description: Settings > About.
+      placeholder: "2026.10.4"
+    validations:
+      required: true
+  - type: dropdown
+    id: install_type
+    attributes:
+      label: Installation type
+      options:
+        - Home Assistant OS
+        - Home Assistant Container
+        - Home Assistant Supervised
+        - Home Assistant Core
+        - Not sure
+  - type: input
+    id: devices
+    attributes:
+      label: Devices or services involved
+      description: Model, firmware or app version, if the problem involves one.
+      placeholder: "Rain Bird ARC8, firmware 2.12"
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: >-
+        Settings > Devices & services > the integration > the menu >
+        Download diagnostics, then drag the file here.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: >-
+        Turn on debug logging on the integration's page, reproduce the problem,
+        then turn it off to download the log. Paste the relevant lines.
+      render: text

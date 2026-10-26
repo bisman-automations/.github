@@ -1,0 +1,343 @@
+# Reusable test workflow for every bisman-automations Home Assistant integration.
+#
+# Each integration repo calls this from a short .github/workflows/test.yml:
+#
+#   jobs:
+#     test:
+#       uses: bisman-automations/.github/.github/workflows/ha-test.yml@main
+#       with:
+#         python-min: "3.13"   # only when the oldest supported HA ran on 3.13
+#
+# What it runs
+# ------------
+# lint      Ruff (check + format --check) with the repo's pyproject.toml
+#           config, and mypy when `mypy` names a package. Runs once, on the
+#           newest Home Assistant, because lint doesn't depend on the HA version.
+# frontend  `node --check` on every sidebar panel script under
+#           custom_components/*/frontend, and `node --test tests/*.mjs` when the
+#           repo has Node tests. Skipped automatically when there is neither.
+# pytest    Two required jobs:
+#             - "oldest supported": requirements_test_min.txt, which pins
+#               pytest-homeassistant-custom-component to the release for the
+#               Home Assistant in hacs.json ("homeassistant"). The job fails if
+#               that pin drifts away from hacs.json's year.month, so the minimum
+#               we advertise is the minimum we test.
+#             - "newest": requirements_test.txt, which leaves the harness
+#               unpinned, so every run (and the weekly schedule in the caller)
+#               tests the newest Home Assistant release.
+# pytest-next
+#           The upcoming Home Assistant (the newest pre-release harness, i.e.
+#           the beta). Informational: it never fails the workflow, it warns early
+#           about breaking changes. Turn off with `next: false`.
+#
+# Python versions
+# ---------------
+# Home Assistant 2026.3 and newer need Python 3.14 (3.14.2+). The newest HA
+# that ran on Python 3.13 was 2026.2, so a repo whose hacs.json minimum is
+# 2026.2 or older sets `python-min: "3.13"`. "newest" and "next" always use
+# `python` (default 3.14).
+#
+# Conventions this relies on (see templates/ in this repo)
+# --------------------------------------------------------
+# - requirements_test.txt: unpinned pytest-homeassistant-custom-component,
+#   pinned ruff (and mypy when used), plus any test-only libraries.
+# - requirements_test_min.txt: the pinned harness for the minimum HA, plus
+#   the same test-only libraries (pinned to what that HA expected).
+# - pyproject.toml holds the pytest, ruff, mypy and coverage settings.
+
+name: Home Assistant integration tests
+
+on:
+  workflow_call:
+    inputs:
+      python:
+        description: Python for the newest and upcoming Home Assistant jobs.
+        type: string
+        default: "3.14"
+      python-min:
+        description: >-
+          Python for the oldest supported Home Assistant job. "3.13" when
+          hacs.json's minimum is 2026.2 or older, otherwise "3.14".
+        type: string
+        default: "3.14"
+      requirements:
+        description: Requirements file for the newest Home Assistant (and lint).
+        type: string
+        default: requirements_test.txt
+      requirements-min:
+        description: Requirements file pinning the oldest supported Home Assistant.
+        type: string
+        default: requirements_test_min.txt
+      core-requirements:
+        description: >-
+          Space-separated Home Assistant core integrations (for example
+          "frontend" or "rainbird homekit") whose pip requirements the tests
+          need. They're read from the installed Home Assistant's manifests, so
+          every job gets the versions that Home Assistant release expects.
+        type: string
+        default: ""
+      setup:
+        description: >-
+          Extra shell run after the requirements are installed, in every
+          pytest job (for example installing the requirements of the core
+          integrations the tests set up). Leave empty when not needed.
+        type: string
+        default: ""
+      pytest:
+        description: >-
+          Command that runs the tests. --cov reports coverage for the
+          integration ([tool.coverage.*] in pyproject.toml, which may also set
+          fail_under); pytest-cov comes with the test harness.
+        type: string
+        default: pytest -q --cov
+      pytest-next:
+        description: >-
+          Command that runs the tests against the upcoming Home Assistant.
+          Empty means the same as `pytest`. Use it for a wrapper that shims
+          gaps between a beta Home Assistant and the test harness.
+        type: string
+        default: ""
+      lint:
+        description: Run ruff check and ruff format --check.
+        type: boolean
+        default: true
+      mypy:
+        description: >-
+          Space-separated paths to type-check with mypy (for example
+          custom_components/daily_routine). Empty skips mypy.
+        type: string
+        default: ""
+      next:
+        description: Also test the upcoming Home Assistant (never fails the run).
+        type: boolean
+        default: true
+      ffmpeg:
+        description: >-
+          Put a static ffmpeg on PATH (from imageio-ffmpeg on PyPI, cached with
+          pip) for tests that encode media. Much faster than apt-get.
+        type: boolean
+        default: false
+
+# The caller's token decides what this can do; nothing here needs more than
+# read access to the repository.
+permissions:
+  contents: read
+
+env:
+  # Quieter, reproducible pip output in the logs.
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PIP_PROGRESS_BAR: "off"
+  FORCE_COLOR: "1"
+
+jobs:
+  lint:
+    name: lint (ruff${{ inputs.mypy != '' && ', mypy' || '' }})
+    if: inputs.lint || inputs.mypy != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ inputs.python }}
+          cache: pip
+          cache-dependency-path: ${{ inputs.requirements }}
+      # The full test requirements, so mypy sees Home Assistant's own types
+      # and ruff is the version pinned in the repo (Dependabot bumps it).
+      - run: pip install -r ${{ inputs.requirements }}
+      - name: Install the requirements of core integrations the tests use
+        if: inputs.core-requirements != ''
+        env:
+          DOMAINS: ${{ inputs.core-requirements }}
+        run: |
+          python - > "$RUNNER_TEMP/core-requirements.txt" <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          import homeassistant.components
+
+          root = Path(homeassistant.components.__path__[0])
+          for domain in os.environ["DOMAINS"].split():
+              manifest = json.loads((root / domain / "manifest.json").read_text())
+              for requirement in manifest.get("requirements", []):
+                  print(requirement)
+          PY
+          echo "Installing:"
+          cat "$RUNNER_TEMP/core-requirements.txt"
+          pip install -r "$RUNNER_TEMP/core-requirements.txt"
+      - name: ruff check
+        if: inputs.lint
+        run: ruff check --output-format=github .
+      - name: ruff format --check
+        if: inputs.lint
+        run: ruff format --check --diff .
+      - name: mypy
+        if: inputs.mypy != ''
+        run: mypy ${{ inputs.mypy }}
+
+  frontend:
+    name: frontend (node)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Find panel scripts and Node tests
+        id: find
+        run: |
+          shopt -s nullglob globstar
+          scripts=(custom_components/*/frontend/**/*.js)
+          tests=(tests/*.mjs)
+          echo "scripts=${#scripts[@]}" >> "$GITHUB_OUTPUT"
+          echo "tests=${#tests[@]}" >> "$GITHUB_OUTPUT"
+          echo "Panel scripts: ${#scripts[@]}, Node tests: ${#tests[@]}"
+      - uses: actions/setup-node@v7
+        if: steps.find.outputs.scripts != '0' || steps.find.outputs.tests != '0'
+        with:
+          node-version: lts/*
+      - name: Check every panel script parses
+        if: steps.find.outputs.scripts != '0'
+        run: |
+          shopt -s globstar
+          for f in custom_components/*/frontend/**/*.js; do
+            echo "node --check $f"
+            node --check "$f"
+          done
+      - name: Run the Node tests
+        if: steps.find.outputs.tests != '0'
+        run: node --test tests/*.mjs
+
+  pytest:
+    name: pytest (Home Assistant ${{ matrix.ha }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ha: oldest supported
+            minimum: true
+          - ha: newest
+            minimum: false
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.minimum && inputs.python-min || inputs.python }}
+          cache: pip
+          cache-dependency-path: ${{ matrix.minimum && inputs.requirements-min || inputs.requirements }}
+      - name: Install the test requirements
+        run: pip install -r ${{ matrix.minimum && inputs.requirements-min || inputs.requirements }}
+      - name: Check the Home Assistant under test is supported
+        env:
+          MINIMUM_JOB: ${{ matrix.minimum }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+
+          from awesomeversion import AwesomeVersion
+          from homeassistant.const import __version__
+
+          minimum = AwesomeVersion(json.load(open("hacs.json"))["homeassistant"])
+          installed = AwesomeVersion(__version__)
+          print(f"Home Assistant {installed} (hacs.json minimum: {minimum})")
+          if installed < minimum:
+              raise SystemExit(
+                  f"::error::Home Assistant {installed} is older than hacs.json's "
+                  f"minimum {minimum}; fix the requirements file."
+              )
+          if os.environ["MINIMUM_JOB"] == "true" and (installed.major, installed.minor) != (minimum.major, minimum.minor):
+              raise SystemExit(
+                  f"::error::requirements_test_min.txt installs Home Assistant {installed}, "
+                  f"but hacs.json says the minimum is {minimum}. Pin "
+                  "pytest-homeassistant-custom-component to the newest release "
+                  f"for {minimum.major}.{minimum.minor}."
+              )
+          PY
+      - name: Install the requirements of core integrations the tests use
+        if: inputs.core-requirements != ''
+        env:
+          DOMAINS: ${{ inputs.core-requirements }}
+        run: |
+          python - > "$RUNNER_TEMP/core-requirements.txt" <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          import homeassistant.components
+
+          root = Path(homeassistant.components.__path__[0])
+          for domain in os.environ["DOMAINS"].split():
+              manifest = json.loads((root / domain / "manifest.json").read_text())
+              for requirement in manifest.get("requirements", []):
+                  print(requirement)
+          PY
+          echo "Installing:"
+          cat "$RUNNER_TEMP/core-requirements.txt"
+          pip install -r "$RUNNER_TEMP/core-requirements.txt"
+      - name: Install ffmpeg
+        if: inputs.ffmpeg
+        run: |
+          pip install "imageio-ffmpeg==0.6.0"
+          mkdir -p "$RUNNER_TEMP/ffmpeg"
+          ln -sf "$(python -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())')" "$RUNNER_TEMP/ffmpeg/ffmpeg"
+          "$RUNNER_TEMP/ffmpeg/ffmpeg" -hide_banner -version | head -n1
+          echo "$RUNNER_TEMP/ffmpeg" >> "$GITHUB_PATH"
+      - name: Repository setup
+        if: inputs.setup != ''
+        run: ${{ inputs.setup }}
+      - name: Installed versions
+        run: pip list 2>/dev/null | grep -iE '^(homeassistant|pytest-homeassistant-custom-component|pytest|ruff|mypy) '
+      - name: Run the tests
+        run: ${{ inputs.pytest }}
+
+  pytest-next:
+    name: pytest (Home Assistant upcoming, informational)
+    if: inputs.next
+    runs-on: ubuntu-latest
+    # A beta can break the test harness itself, so this job only warns.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ inputs.python }}
+          cache: pip
+          cache-dependency-path: ${{ inputs.requirements }}
+      - name: Install the test requirements with the newest pre-release harness
+        run: |
+          pip install -r ${{ inputs.requirements }}
+          pip install --pre --upgrade pytest-homeassistant-custom-component
+      - name: Install the requirements of core integrations the tests use
+        if: inputs.core-requirements != ''
+        env:
+          DOMAINS: ${{ inputs.core-requirements }}
+        run: |
+          python - > "$RUNNER_TEMP/core-requirements.txt" <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          import homeassistant.components
+
+          root = Path(homeassistant.components.__path__[0])
+          for domain in os.environ["DOMAINS"].split():
+              manifest = json.loads((root / domain / "manifest.json").read_text())
+              for requirement in manifest.get("requirements", []):
+                  print(requirement)
+          PY
+          echo "Installing:"
+          cat "$RUNNER_TEMP/core-requirements.txt"
+          pip install -r "$RUNNER_TEMP/core-requirements.txt"
+      - name: Install ffmpeg
+        if: inputs.ffmpeg
+        run: |
+          pip install "imageio-ffmpeg==0.6.0"
+          mkdir -p "$RUNNER_TEMP/ffmpeg"
+          ln -sf "$(python -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())')" "$RUNNER_TEMP/ffmpeg/ffmpeg"
+          echo "$RUNNER_TEMP/ffmpeg" >> "$GITHUB_PATH"
+      - name: Repository setup
+        if: inputs.setup != ''
+        run: ${{ inputs.setup }}
+      - name: Installed versions
+        run: python -c "from homeassistant.const import __version__; print('Home Assistant', __version__)"
+      - name: Run the tests
+        run: ${{ inputs.pytest-next != '' && inputs.pytest-next || inputs.pytest }}

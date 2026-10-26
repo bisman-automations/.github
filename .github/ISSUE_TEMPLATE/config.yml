@@ -1,0 +1,14 @@
+# Organization-wide issue chooser settings (see bug_report.yml).
+blank_issues_enabled: false
+contact_links:
+  - name: Home Assistant core integrations
+    url: https://github.com/home-assistant/core/issues
+    about: >-
+      Problems with an integration that ships with Home Assistant (for example
+      Rain Bird, Ford, Lutron, Music Assistant, HomeKit Bridge) belong there.
+  - name: Home Assistant Community
+    url: https://community.home-assistant.io/
+    about: Questions about setting things up, automations and dashboards.
+  - name: Report a security vulnerability
+    url: https://github.com/bisman-automations/.github/blob/main/SECURITY.md
+    about: Please don't open a public issue for security problems.

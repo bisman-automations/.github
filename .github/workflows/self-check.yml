@@ -1,0 +1,42 @@
+# CI for this .github repository itself: lint the reusable workflows and
+# starter templates with actionlint, and lint and test the standards checker,
+# so a broken change here is caught before every integration repo picks it up
+# (they all call these workflows at @main).
+
+name: Self check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: actionlint
+        run: |
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint -color .github/workflows/*.yml workflow-templates/*.yml templates/repo/.github/workflows/*.yml
+
+  checker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      # The same ruff version the integration repos pin (requirements_test.txt
+      # in templates/repo), with the settings in pyproject.toml.
+      - name: ruff
+        run: |
+          pip install "$(grep -E '^ruff==' templates/repo/requirements_test.txt)"
+          ruff check --output-format=github scripts
+          ruff format --check --diff scripts
+      - name: Checker unit tests
+        run: python -m unittest discover -s scripts -p "test_*.py" -v

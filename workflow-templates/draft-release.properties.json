@@ -1,0 +1,12 @@
+{
+  "name": "Home Assistant integration draft release",
+  "description": "Keeps a DRAFT release for manifest.json's version, with its CHANGELOG.md notes and the integration zip. Never publishes or tags.",
+  "iconName": "octicon home",
+  "categories": [
+    "Python"
+  ],
+  "filePatterns": [
+    "^hacs\\.json$",
+    "custom_components/.*/manifest\\.json$"
+  ]
+}

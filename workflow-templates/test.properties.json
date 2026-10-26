@@ -1,0 +1,12 @@
+{
+  "name": "Home Assistant integration tests",
+  "description": "Ruff, mypy (optional), sidebar panel scripts and pytest on the oldest supported, newest and upcoming Home Assistant, using the bisman-automations shared workflow.",
+  "iconName": "octicon home",
+  "categories": [
+    "Python"
+  ],
+  "filePatterns": [
+    "^hacs\\.json$",
+    "custom_components/.*/manifest\\.json$"
+  ]
+}
