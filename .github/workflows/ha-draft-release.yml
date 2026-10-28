@@ -39,7 +39,11 @@
 #   are matched to the amended copy of the tagged commit (same author, author
 #   date and subject), with a warning that the amendment's own changes aren't
 #   listed. When neither exists the commit list is left out with a warning
-#   instead of failing. Tags are never moved.
+#   instead of failing. Tags are never moved. That search reads the whole
+#   `git log` and keeps the first match. It must not close the pipe early
+#   (`awk` `exit`, `head`, `sed` `q`): git is still writing, SIGPIPE makes
+#   the pipeline exit 141 under `pipefail`, and the draft is left stale.
+#   The zip listing is printed the same way, without `head`.
 # - Drafts this workflow made for other versions are removed (they carry a
 #   hidden marker). Drafts made by hand are never touched. A draft this
 #   workflow already untagged (its name is still the tag and its body still
@@ -165,16 +169,47 @@ jobs:
             else
               # The tag isn't in main's history (history was rewritten after it
               # was released). Find the commit on main with the same files.
+              #
+              # git log lists newest first, so the commit we want is the first
+              # matching line. Taking it with `awk ... exit` (or `head`, or
+              # `sed q`) closes the pipe while git log is still writing the
+              # rest of the history. git is killed by SIGPIPE. This step has
+              # `set -o pipefail`, so the pipeline status is 141 and the step
+              # stops before body.md is written or the draft is updated. The
+              # history after the match often still fits in the pipe buffer, so
+              # the same command succeeds on a re-run; when that unread output
+              # is larger than the buffer, or the reader runs before git
+              # finishes its writes, it fails. That is what happened drafting
+              # v1.9.2 on ha-button-actions (v1.9.1 is not an ancestor of main):
+              # the notes step exited 141 and the draft stayed stale.
+              #
+              # The awk programs below read every line and remember the first
+              # hit. They do not exit early, so git log is allowed to finish
+              # and the pipeline status is 0. There is no `-n` to give git:
+              # the match can sit anywhere in the history. The first hit is
+              # the same commit the early exit used to print, so the commit
+              # list and the compare link are unchanged.
               tree=$(git rev-parse "refs/tags/${previous}^{tree}")
-              base=$(git log --format='%H %T' "$SHA" | awk -v t="$tree" '$2 == t { print $1; exit }')
+              base=$(git log --format='%H %T' "$SHA" | awk -v t="$tree" '
+                $2 == t && !printed { print $1; printed = 1 }
+              ')
               if [ -n "$base" ]; then
                 echo "::notice::${previous} isn't in main's history; listing commits since ${base:0:7}, the commit on main with the same files."
               else
                 # No identical files: look for the amended or rebased copy of
                 # the tagged commit (same author, author date and subject).
+                # Same rule as the tree search above. This `git log` is the
+                # one that runs when the tree search found nothing, and an
+                # `exit` here would SIGPIPE it in the same way.
                 key=$(git log -1 --format='%ae%x09%at%x09%s' "refs/tags/${previous}")
                 base=$(git log --format='%H%x09%ae%x09%at%x09%s' "$SHA" |
-                  awk -F '\t' -v k="$key" '{ h = $1; sub(/^[^\t]*\t/, ""); if ($0 == k) { print h; exit } }')
+                  awk -F '\t' -v k="$key" '
+                    {
+                      commit = $1
+                      sub(/^[^\t]*\t/, "")
+                      if (!printed && $0 == k) { print commit; printed = 1 }
+                    }
+                  ')
                 if [ -n "$base" ]; then
                   echo "::warning::${previous} isn't in main's history. ${base:0:7} on main is the same commit amended after the tag, so the commit list starts there; changes made by that amendment aren't listed. Check that CHANGELOG.md covers them."
                 else
@@ -218,7 +253,13 @@ jobs:
                   if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc":
                       zf.write(path, path.relative_to(root))
           PY
-          python3 -m zipfile -l "${DOMAIN}.zip" | head -n 40
+          # The first 40 lines of the listing, for the log. `head -n 40`
+          # closes the pipe once it has them. zipfile is still writing, so
+          # it dies with a broken pipe (SIGPIPE) and pipefail fails the step
+          # whenever the archive lists more than 40 files. awk prints those
+          # same 40 lines and keeps reading until zipfile finishes, which
+          # leaves the log output unchanged and does not raise SIGPIPE.
+          python3 -m zipfile -l "${DOMAIN}.zip" | awk 'NR <= 40'
 
       - name: Create or update the draft
         env:
