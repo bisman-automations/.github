@@ -429,6 +429,10 @@ def check_readme(
     name = report.name
     if "my.home-assistant.io/redirect/hacs_repository" not in text:
         report.error("README.md", "missing the HACS 'open this repository' My button")
+    if "my.home-assistant.io/redirect/marketplace_repository" not in text:
+        report.error(
+            "README.md", "missing the Marketplace 'open this repository' My button"
+        )
     if (
         manifest
         and manifest.get("config_flow")
