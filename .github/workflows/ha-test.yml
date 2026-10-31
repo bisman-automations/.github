@@ -26,9 +26,13 @@
 #               unpinned, so every run (and the weekly schedule in the caller)
 #               tests the newest Home Assistant release.
 # pytest-next
-#           The upcoming Home Assistant (the newest pre-release harness, i.e.
-#           the beta). Informational: it never fails the workflow, it warns early
-#           about breaking changes. Turn off with `next: false`.
+#           The upcoming Home Assistant: the newest harness, with the newest
+#           Home Assistant pre-release (the beta) installed over it when that is
+#           newer. The harness is only published for released versions, so on
+#           its own it never reaches the beta. A .pth file loads small shims at
+#           startup that bridge the harness's known gaps with the beta.
+#           Informational: it never fails the workflow, it warns early about
+#           breaking changes. Turn off with `next: false`.
 #
 # Python versions
 # ---------------
@@ -306,6 +310,81 @@ jobs:
         run: |
           pip install -r ${{ inputs.requirements }}
           pip install --pre --upgrade pytest-homeassistant-custom-component
+      - name: Install the newest Home Assistant pre-release over the harness
+        run: |
+          current=$(python -c "from homeassistant.const import __version__; print(__version__)")
+          upcoming=$(python - <<'PY'
+          import json
+          import urllib.request
+
+          from packaging.version import Version
+
+          with urllib.request.urlopen("https://pypi.org/pypi/homeassistant/json") as response:
+              releases = json.load(response)["releases"]
+          print(max((v for v, files in releases.items() if files), key=Version))
+          PY
+          )
+          if python -c "import sys; from packaging.version import Version; sys.exit(not Version('$upcoming') > Version('$current'))"; then
+            echo "Installing Home Assistant $upcoming over the harness's $current"
+            # pip warns that the harness pins $current; that's expected here.
+            pip install --pre "homeassistant==$upcoming"
+          else
+            echo "No pre-release newer than $current"
+          fi
+          site=$(python -c "import sysconfig; print(sysconfig.get_paths()['purelib'])")
+          cat > "$site/ha_upcoming_shims.py" <<'PY'
+          """Bridge pytest-homeassistant-custom-component to an upcoming Home Assistant.
+
+          Loaded at interpreter start by ha_upcoming_shims.pth in the pytest-next job
+          only. The harness is released for each Home Assistant release, so against a
+          beta it lags behind; each shim applies only when it's needed.
+          """
+
+          import importlib.util
+
+
+          def _apply() -> None:
+              if importlib.util.find_spec("homeassistant") is None:
+                  return
+              # Newer Home Assistant aliases httpx when it loads, so it must load
+              # before the harness imports httpx.
+              import homeassistant  # noqa: F401
+
+              # 2026.11 moved _clear_logger_overwrites into logger.helpers.
+              from homeassistant.components import logger
+
+              if not hasattr(logger, "_clear_logger_overwrites"):
+                  try:
+                      from homeassistant.components.logger import helpers
+                  except ImportError:
+                      pass
+                  else:
+                      logger._clear_logger_overwrites = helpers._clear_logger_overwrites
+
+              # 2026.11 removed RestoreStateData.last_states (stored states are keyed
+              # by entity registry id); the harness's mock_restore_cache sets it.
+              from homeassistant.helpers import restore_state as rs
+
+              data = rs.RestoreStateData
+              if not hasattr(data, "last_states") and hasattr(data, "async_get_stored_state"):
+
+                  def _set(self, value):
+                      self.last_states_by_entity_id = dict(value)
+
+                  data.last_states = property(lambda self: self.last_states_by_entity_id, _set)
+                  original = data.async_get_stored_state
+
+                  def _get(self, entity_id):
+                      return original(self, entity_id) or self.last_states_by_entity_id.get(
+                          entity_id
+                      )
+
+                  data.async_get_stored_state = _get
+
+
+          _apply()
+          PY
+          echo "import ha_upcoming_shims" > "$site/ha_upcoming_shims.pth"
       - name: Install the requirements of core integrations the tests use
         if: inputs.core-requirements != ''
         env:
