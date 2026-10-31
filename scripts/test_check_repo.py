@@ -278,6 +278,14 @@ class CheckRepoTest(unittest.TestCase):
         )
         self.assert_error("remove the [Unreleased] compare link")
 
+    def test_changelog_link_points_at_this_repo(self) -> None:
+        self.edit(
+            "CHANGELOG.md",
+            "[1.0.0]: https://github.com/bisman-automations/ha-demo/",
+            "[1.0.0]: https://github.com/bisman-automations/./",
+        )
+        self.assert_error("[1.0.0] link should start with")
+
     # README -----------------------------------------------------------------
 
     def test_readme_hacs_my_button(self) -> None:

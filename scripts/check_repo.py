@@ -393,6 +393,24 @@ def check_changelog(repo: Path, report: Report, version: str | None) -> None:
             report.error("CHANGELOG.md", f"'## [{name}]' needs ' - YYYY-MM-DD'")
         if not re.search(rf"^\[{re.escape(name)}\]: https://github\.com/", text, re.M):
             report.error("CHANGELOG.md", f"no compare link for [{name}] at the bottom")
+    # Each compare link points at this repository and the previous version.
+    links = dict(re.findall(r"^\[([^\]]+)\]: (\S+)$", text, re.M))
+    versions = [name for name, _ in headings if name != "Unreleased"]
+    base = f"https://github.com/{ORG}/{report.name}/"
+    for index, name in enumerate(versions):
+        link = links.get(name)
+        if link is None:
+            continue
+        if index + 1 < len(versions):
+            expected = f"{base}compare/v{versions[index + 1]}...v{name}"
+        else:
+            expected = None
+        if expected and link != expected:
+            report.error(
+                "CHANGELOG.md", f"[{name}] link is {link!r}, expected {expected!r}"
+            )
+        elif not link.startswith(base):
+            report.error("CHANGELOG.md", f"[{name}] link should start with {base!r}")
     if re.search(r"^\[Unreleased\]:", text, re.M):
         report.error(
             "CHANGELOG.md",
