@@ -43,7 +43,7 @@ Projects under this organization are typically:
 
 ## Integrations
 
-Every integration installs through [HACS](https://hacs.xyz/) as a custom repository and is set up from **Settings → Devices & services**.
+Every integration installs through [HACS](https://hacs.xyz/). Once it is in the HACS default list, open HACS and search for its name; adding the repository by URL is the fallback. Set it up from **Settings → Devices & services**.
 
 | Integration | What it does | Home Assistant |
 | --- | --- | --- |

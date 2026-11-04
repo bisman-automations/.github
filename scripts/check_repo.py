@@ -98,6 +98,26 @@ SHARED_END = "<!-- END bisman-automations shared rules -->"
 README_SECTIONS = ["Installation", "Setup", "Troubleshooting", "Development", "License"]
 LICENSE_MIN_LINES = 15  # A full MIT text is 21 lines; Apache-2.0 is ~200.
 
+# bisman-automations entries in https://github.com/hacs/default (`integration`),
+# as of 2026-11-04. A listed repository's Installation section leads with
+# searching HACS; adding the GitHub URL is only the fallback. Warning, not an
+# error: the default list moves, and this copy is updated by hand.
+HACS_DEFAULT = frozenset(
+    {
+        "ha-appliance-live-activity",
+        "ha-button-actions",
+        "ha-daily-routine",
+        "ha-device-info",
+        "ha-device-linker",
+        "ha-ford-assistant",
+        "ha-holiday-lighting",
+        "ha-mdu",
+        "ha-media-mgmt",
+        "ha-tcl-android-tv-remote",
+        "ha-tv-mgmt",
+    }
+)
+
 
 class Report:
     """Collects findings and prints them."""
@@ -433,6 +453,25 @@ def check_changelog(repo: Path, report: Report, version: str | None) -> None:
         )
 
 
+def _installation_body(text: str) -> str | None:
+    match = re.search(r"^## Installation\s*\n(.*?)(?=^## |\Z)", text, re.M | re.S)
+    if match is None:
+        return None
+    return match.group(1)
+
+
+def _install_leads_with_hacs_search(install: str, display_name: str) -> bool:
+    """True when the first install method is searching HACS for display_name."""
+    heading = re.search(r"^### (.+?)\s*$", install, re.M)
+    if heading is None or not heading.group(1).startswith("HACS"):
+        return False
+    next_heading = re.search(r"^### ", install[heading.end() :], re.M)
+    first = install[: heading.end() + next_heading.start()] if next_heading else install
+    return (
+        re.search(rf"search for \*\*{re.escape(display_name)}\*\*", first) is not None
+    )
+
+
 def check_readme(
     repo: Path,
     report: Report,
@@ -481,6 +520,16 @@ def check_readme(
     for section in README_SECTIONS:
         if section not in h2:
             report.error("README.md", f"missing '## {section}'")
+    if report.name in HACS_DEFAULT and manifest and manifest.get("name"):
+        install = _installation_body(text)
+        display = str(manifest["name"])
+        if install is None or not _install_leads_with_hacs_search(install, display):
+            report.warning(
+                "README.md",
+                "listed in HACS default; lead Installation with searching for "
+                f"{display} in HACS, and keep the custom repository steps as "
+                "the fallback",
+            )
 
 
 def check_docs(repo: Path, report: Report) -> None:

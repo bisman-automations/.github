@@ -298,6 +298,59 @@ class CheckRepoTest(unittest.TestCase):
         self.edit("hacs.json", f"{MINIMUM}.0", "2026.4.0")
         self.assert_error("the Home Assistant badge should say 2026.4+")
 
+    def test_hacs_default_without_search_warns(self) -> None:
+        self.edit(
+            "README.md",
+            "1. Open HACS and search for **Demo**",
+            "1. Open HACS and add this repository",
+        )
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            report = check_repo.check(self.repo, name="ha-tv-mgmt")
+        output = out.getvalue()
+        self.assertGreaterEqual(report.warnings, 1, output)
+        self.assertIn(
+            "listed in HACS default; lead Installation with searching for Demo",
+            output,
+        )
+
+    def test_hacs_default_with_search_does_not_warn(self) -> None:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            check_repo.check(self.repo, name="ha-tv-mgmt")
+        self.assertNotIn("listed in HACS default", out.getvalue())
+
+    def test_unlisted_repo_skips_hacs_search_warning(self) -> None:
+        self.edit(
+            "README.md",
+            "1. Open HACS and search for **Demo**",
+            "1. Open HACS and add this repository",
+        )
+        report, output = self.run_check()
+        self.assertEqual((report.errors, report.warnings), (0, 0), output)
+
+    def test_hacs_default_marketplace_first_warns(self) -> None:
+        readme = self.repo / "README.md"
+        text = readme.read_text(encoding="utf-8")
+        start = text.index("### HACS (recommended)")
+        marketplace = text.index("### Marketplace")
+        manual = text.index("### Manual")
+        hacs_block = text[start:marketplace]
+        market_block = text[marketplace:manual]
+        readme.write_text(
+            text[:start] + market_block + hacs_block + text[manual:],
+            encoding="utf-8",
+        )
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            report = check_repo.check(self.repo, name="ha-tv-mgmt")
+        output = out.getvalue()
+        self.assertGreaterEqual(report.warnings, 1, output)
+        self.assertIn(
+            "listed in HACS default; lead Installation with searching for Demo",
+            output,
+        )
+
     # CLAUDE.md, AGENTS.md, LICENSE, .gitignore ------------------------------------
 
     def test_shared_rules_must_match_template(self) -> None:
