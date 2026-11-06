@@ -164,8 +164,9 @@ pushes a tag.
    where the heading and the entries are written.
 2. Push to `main`.
 3. **Draft release** creates or refreshes the DRAFT release `vX.Y.Z`:
-   that version's CHANGELOG section, the commits since the previous release,
-   a compare link, and `<domain>.zip` for installing without HACS.
+   just that version's CHANGELOG section and a **Full Changelog** compare
+   link (no commit list, nothing hidden), and `<domain>.zip` for installing
+   without HACS.
 4. Donavan reviews the draft on GitHub and publishes it. Publishing creates
    the tag.
 5. **Release check** runs on the new tag and confirms it matches

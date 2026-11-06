@@ -20,8 +20,9 @@
 #    "## [Unreleased]" section.
 # 2. Push to main.
 # 3. This workflow creates (or refreshes) a DRAFT release vX.Y.Z:
-#      - notes: that version's CHANGELOG.md section,
-#      - a "Commits" list since the previous release, and a compare link,
+#      - notes: that version's CHANGELOG.md section, then a "Full Changelog"
+#        compare link from the previous release. Nothing else: no commit
+#        list and no hidden marker, so the published notes are just the notes.
 #      - <domain>.zip, the integration folder's contents, for manual installs.
 # 4. Donavan reviews the draft and publishes it. Publishing creates the tag;
 #    nothing here ever publishes a release or pushes a tag.
@@ -35,19 +36,20 @@
 #   for the bump. It does not read an [Unreleased] section.
 # - Previous releases whose tag isn't in main's history (for example after a
 #   history rewrite) are matched to the commit on main with the exact same
-#   files, so the commit list and compare link still work. Failing that, they
+#   files, so the compare link still works. Failing that, they
 #   are matched to the amended copy of the tagged commit (same author, author
-#   date and subject), with a warning that the amendment's own changes aren't
-#   listed. When neither exists the commit list is left out with a warning
-#   instead of failing. Tags are never moved. That search reads the whole
+#   date and subject), with a warning. That match is the compare link's start.
+#   When neither exists the compare link is left out with a warning instead
+#   of failing. Tags are never moved. That search reads the whole
 #   `git log` and keeps the first match. It must not close the pipe early
 #   (`awk` `exit`, `head`, `sed` `q`): git is still writing, SIGPIPE makes
 #   the pipeline exit 141 under `pipefail`, and the draft is left stale.
 #   The zip listing is printed the same way, without `head`.
-# - Drafts this workflow made for other versions are removed (they carry a
-#   hidden marker). Drafts made by hand are never touched. A draft this
-#   workflow already untagged (its name is still the tag and its body still
-#   has the marker) is adopted and retagged, not replaced.
+# - Drafts this workflow made for other versions are removed. This
+#   workflow's drafts are the ones github-actions[bot] created (and older ones
+#   whose body still has the hidden marker earlier versions added). Drafts
+#   made by hand are never touched. A draft this workflow already untagged
+#   (its name is still the tag) is adopted and retagged, not replaced.
 # - Updating a draft always sends tag_name. Omitting it makes GitHub rewrite
 #   the pending tag to untagged-<id>, after which an upload by tag fails
 #   with "release not found". The zip is uploaded to the release id instead.
@@ -77,11 +79,14 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
       SHA: ${{ github.sha }}
+      # Earlier versions put this in the notes to find their own drafts; drafts
+      # are now found by author, and this only still matches old drafts.
       MARKER: "<!-- auto-draft-release -->"
+      BOT: "github-actions[bot]"
     steps:
       - uses: actions/checkout@v7
         with:
-          # Full history and tags, to list the commits since the last release.
+          # Full history and tags, to find the previous release for the compare link.
           fetch-depth: 0
           fetch-tags: true
 
@@ -194,7 +199,7 @@ jobs:
                 $2 == t && !printed { print $1; printed = 1 }
               ')
               if [ -n "$base" ]; then
-                echo "::notice::${previous} isn't in main's history; listing commits since ${base:0:7}, the commit on main with the same files."
+                echo "::notice::${previous} isn't in main's history; comparing from ${base:0:7}, the commit on main with the same files."
               else
                 # No identical files: look for the amended or rebased copy of
                 # the tagged commit (same author, author date and subject).
@@ -211,24 +216,20 @@ jobs:
                     }
                   ')
                 if [ -n "$base" ]; then
-                  echo "::warning::${previous} isn't in main's history. ${base:0:7} on main is the same commit amended after the tag, so the commit list starts there; changes made by that amendment aren't listed. Check that CHANGELOG.md covers them."
+                  echo "::warning::${previous} isn't in main's history. ${base:0:7} on main is the same commit amended after the tag, so the compare link starts there. Check that CHANGELOG.md covers the amendment's changes."
                 else
-                  echo "::warning::${previous} isn't in main's history and no commit on main matches it, so the draft has no commit list. See the repository's CLAUDE.md."
+                  echo "::warning::${previous} isn't in main's history and no commit on main matches it, so the draft has no compare link. See the repository's CLAUDE.md."
                 fi
               fi
             fi
           fi
 
+          # Just the notes, and the compare link GitHub would add itself.
           {
             cat notes.md
             if [ -n "$base" ]; then
-              commits=$(git log --reverse --no-merges --format='- %s (%h)' "${base}..${SHA}")
-              if [ -n "$commits" ]; then
-                printf '\n### Commits\n\n%s\n' "$commits"
-              fi
-              printf '\n**Full changelog**: https://github.com/%s/compare/%s...%s\n' "$REPO" "$base" "$TAG"
+              printf '\n**Full Changelog**: https://github.com/%s/compare/%s...%s\n' "$REPO" "$base" "$TAG"
             fi
-            printf '\n%s\n' "$MARKER"
           } > body.md
           echo "----- release notes -----"
           cat body.md
@@ -273,10 +274,10 @@ jobs:
 
           # Adopt this version's draft. A previous run may already have untagged
           # it: a PATCH that omits tag_name makes GitHub rewrite the pending tag
-          # to untagged-<id>, while the name stays $TAG and the body still
-          # carries this workflow's marker. Treat that as the same draft so we
-          # retag it instead of opening a second one.
-          draft_id=$(jq -r --arg t "$TAG" --arg m "$MARKER" '[ .[] | select(.draft and ( .tag_name == $t or (.name == $t and ((.body // "") | contains($m))) )) ][0].id // empty' releases.json)
+          # to untagged-<id>, while the name stays $TAG. Treat that draft (made
+          # by this workflow) as the same one so we retag it instead of opening
+          # a second one.
+          draft_id=$(jq -r --arg t "$TAG" --arg m "$MARKER" --arg bot "$BOT" '[ .[] | select(.draft and ( .tag_name == $t or (.name == $t and (.author.login == $bot or ((.body // "") | contains($m)))) )) ][0].id // empty' releases.json)
           if [ -n "$draft_id" ]; then
             # Always send tag_name. Leaving it out is what rewrites the pending
             # tag to untagged-<id>; uploading the zip by tag then fails with
@@ -320,8 +321,8 @@ jobs:
           # we just patched is still in it. One this workflow had already
           # untagged has tag_name != $TAG and would match; never delete the
           # draft we just kept.
-          jq -r --arg t "$TAG" --arg m "$MARKER" --argjson keep "$draft_id" \
-            '.[] | select(.draft and .id != $keep and .tag_name != $t and ((.body // "") | contains($m))) | .id' releases.json |
+          jq -r --arg t "$TAG" --arg m "$MARKER" --arg bot "$BOT" --argjson keep "$draft_id" \
+            '.[] | select(.draft and .id != $keep and .tag_name != $t and (.author.login == $bot or ((.body // "") | contains($m)))) | .id' releases.json |
             while read -r id; do
               gh api -X DELETE "repos/${REPO}/releases/${id}"
               echo "Removed stale draft ${id}"
