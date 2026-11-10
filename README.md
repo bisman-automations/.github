@@ -197,15 +197,19 @@ drops a release people use) is called out under `Changed`.
   and License badges; the My buttons to open the repository in HACS and (for
   config-flow integrations) to start setup; and at least the `Installation`,
   `Setup`, `Troubleshooting`, `Development` and `License` sections. Start
-  from `templates/repo/README.md`. Installation leads with **HACS
-  (recommended)**: open HACS, search for the integration's name and download
-  it, with the My button that opens the repository in HACS. Adding the
-  repository by URL is a **Custom repository** fallback, and the manual steps
-  stay when the README has them. A repository in the HACS default list
+  from `templates/repo/README.md`. Home Assistant 2026.11 renames HACS to
+  the Marketplace. Installation leads with **Marketplace (Home Assistant
+  2026.11 and newer, recommended)**: open the Marketplace, search for the
+  integration's name and download it, with the My button that opens the
+  repository in the Marketplace (`marketplace_repository`). **HACS (Home
+  Assistant 2026.10 and older)** keeps the search steps and the My button
+  that opens the repository in HACS. Adding the repository by URL is a
+  **Custom repository** fallback, and the manual steps stay when the README
+  has them. A repository in the HACS default list
   (`HACS_DEFAULT` in `scripts/check_repo.py`, the bisman-automations entries
-  from [hacs/default](https://github.com/hacs/default)) that does not lead
-  with that search gets a warning. Update `HACS_DEFAULT` when an integration
-  is added to or removed from that list.
+  from [hacs/default](https://github.com/hacs/default)) that leads with
+  neither the Marketplace search nor the HACS search gets a warning. Update
+  `HACS_DEFAULT` when an integration is added to or removed from that list.
 - **CHANGELOG.md**: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/),
   with no `## [Unreleased]` section. The release commit adds
   `## [X.Y.Z] - YYYY-MM-DD` and that version's entries, only the standard

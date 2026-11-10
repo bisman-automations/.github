@@ -301,6 +301,11 @@ class CheckRepoTest(unittest.TestCase):
     def test_hacs_default_without_search_warns(self) -> None:
         self.edit(
             "README.md",
+            "1. Open the Marketplace and search for **Demo**",
+            "1. Open the Marketplace and add this repository",
+        )
+        self.edit(
+            "README.md",
             "1. Open HACS and search for **Demo**",
             "1. Open HACS and add this repository",
         )
@@ -310,35 +315,53 @@ class CheckRepoTest(unittest.TestCase):
         output = out.getvalue()
         self.assertGreaterEqual(report.warnings, 1, output)
         self.assertIn(
-            "listed in HACS default; lead Installation with searching for Demo",
+            "listed in the HACS default catalog; lead Installation with "
+            "searching for Demo",
             output,
         )
 
-    def test_hacs_default_with_search_does_not_warn(self) -> None:
+    def test_hacs_default_with_marketplace_search_does_not_warn(self) -> None:
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             check_repo.check(self.repo, name="ha-tv-mgmt")
-        self.assertNotIn("listed in HACS default", out.getvalue())
+        self.assertNotIn("listed in the HACS default catalog", out.getvalue())
+
+    def test_hacs_default_hacs_search_first_does_not_warn(self) -> None:
+        readme = self.repo / "README.md"
+        text = readme.read_text(encoding="utf-8")
+        start = text.index("### Marketplace")
+        hacs = text.index("### HACS")
+        custom = text.index("### Custom repository")
+        market_block = text[start:hacs]
+        hacs_block = text[hacs:custom]
+        readme.write_text(
+            text[:start] + hacs_block + market_block + text[custom:],
+            encoding="utf-8",
+        )
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            check_repo.check(self.repo, name="ha-tv-mgmt")
+        self.assertNotIn("listed in the HACS default catalog", out.getvalue())
 
     def test_unlisted_repo_skips_hacs_search_warning(self) -> None:
         self.edit(
             "README.md",
-            "1. Open HACS and search for **Demo**",
-            "1. Open HACS and add this repository",
+            "1. Open the Marketplace and search for **Demo**",
+            "1. Open the Marketplace and add this repository",
         )
         report, output = self.run_check()
         self.assertEqual((report.errors, report.warnings), (0, 0), output)
 
-    def test_hacs_default_marketplace_first_warns(self) -> None:
+    def test_hacs_default_custom_repository_first_warns(self) -> None:
         readme = self.repo / "README.md"
         text = readme.read_text(encoding="utf-8")
-        start = text.index("### HACS (recommended)")
-        marketplace = text.index("### Marketplace")
+        start = text.index("### Marketplace")
+        custom = text.index("### Custom repository")
         manual = text.index("### Manual")
-        hacs_block = text[start:marketplace]
-        market_block = text[marketplace:manual]
+        leading = text[start:custom]
+        custom_block = text[custom:manual]
         readme.write_text(
-            text[:start] + market_block + hacs_block + text[manual:],
+            text[:start] + custom_block + leading + text[manual:],
             encoding="utf-8",
         )
         out = io.StringIO()
@@ -347,7 +370,8 @@ class CheckRepoTest(unittest.TestCase):
         output = out.getvalue()
         self.assertGreaterEqual(report.warnings, 1, output)
         self.assertIn(
-            "listed in HACS default; lead Installation with searching for Demo",
+            "listed in the HACS default catalog; lead Installation with "
+            "searching for Demo",
             output,
         )
 

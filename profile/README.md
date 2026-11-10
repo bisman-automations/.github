@@ -43,7 +43,7 @@ Projects under this organization are typically:
 
 ## Integrations
 
-Every integration installs through [HACS](https://hacs.xyz/). Once it is in the HACS default list, open HACS and search for its name; adding the repository by URL is the fallback. Set it up from **Settings → Devices & services**.
+Every integration installs from the Marketplace on Home Assistant 2026.11 and newer, and from [HACS](https://hacs.xyz/) on 2026.10 and older. Once it is in the default catalog, open the Marketplace and search for its name; on 2026.10 and older, search in HACS. Adding the repository by URL is the fallback. Set it up from **Settings → Devices & services**.
 
 | Integration | What it does | Home Assistant |
 | --- | --- | --- |

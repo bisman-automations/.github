@@ -99,7 +99,7 @@ README_SECTIONS = ["Installation", "Setup", "Troubleshooting", "Development", "L
 LICENSE_MIN_LINES = 15  # A full MIT text is 21 lines; Apache-2.0 is ~200.
 
 # bisman-automations entries in https://github.com/hacs/default (`integration`),
-# as of 2026-11-04. A listed repository's Installation section leads with
+# as of 2026-11-10. A listed repository's Installation section leads with
 # searching HACS; adding the GitHub URL is only the fallback. Warning, not an
 # error: the default list moves, and this copy is updated by hand.
 HACS_DEFAULT = frozenset(
@@ -109,10 +109,14 @@ HACS_DEFAULT = frozenset(
         "ha-daily-routine",
         "ha-device-info",
         "ha-device-linker",
+        "ha-family",
         "ha-ford-assistant",
         "ha-holiday-lighting",
+        "ha-homekit-extended",
+        "ha-matter-bridge",
         "ha-mdu",
         "ha-media-mgmt",
+        "ha-rainbird-extended",
         "ha-tcl-android-tv-remote",
         "ha-tv-mgmt",
     }
@@ -460,10 +464,18 @@ def _installation_body(text: str) -> str | None:
     return match.group(1)
 
 
-def _install_leads_with_hacs_search(install: str, display_name: str) -> bool:
-    """True when the first install method is searching HACS for display_name."""
+def _install_leads_with_catalog_search(install: str, display_name: str) -> bool:
+    """True when Installation leads with a Marketplace or HACS search.
+
+    Home Assistant 2026.11 renames HACS to the Marketplace. A default-catalog
+    repository leads with that search. Searching HACS is the path for 2026.10
+    and older, so a README that still leads with the HACS search also passes.
+    """
     heading = re.search(r"^### (.+?)\s*$", install, re.M)
-    if heading is None or not heading.group(1).startswith("HACS"):
+    if heading is None:
+        return False
+    title = heading.group(1)
+    if not (title.startswith("Marketplace") or title.startswith("HACS")):
         return False
     next_heading = re.search(r"^### ", install[heading.end() :], re.M)
     first = install[: heading.end() + next_heading.start()] if next_heading else install
@@ -523,12 +535,12 @@ def check_readme(
     if report.name in HACS_DEFAULT and manifest and manifest.get("name"):
         install = _installation_body(text)
         display = str(manifest["name"])
-        if install is None or not _install_leads_with_hacs_search(install, display):
+        if install is None or not _install_leads_with_catalog_search(install, display):
             report.warning(
                 "README.md",
-                "listed in HACS default; lead Installation with searching for "
-                f"{display} in HACS, and keep the custom repository steps as "
-                "the fallback",
+                "listed in the HACS default catalog; lead Installation with "
+                f"searching for {display} in the Marketplace or in HACS, and "
+                "keep the custom repository steps as the fallback",
             )
 
 
