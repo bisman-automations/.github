@@ -198,6 +198,11 @@ class CheckRepoTest(unittest.TestCase):
         self.update_manifest(requirements=["Pillow==11.0.0"])
         self.assert_error("Pillow in requirements")
 
+    def test_manifest_pillow_plugin_allowed(self) -> None:
+        self.update_manifest(requirements=["pillow-heif==1.8.1"])
+        _, output = self.run_check()
+        self.assertNotIn("Pillow in requirements", output)
+
     def test_manifest_org_codeowner_rejected(self) -> None:
         self.update_manifest(codeowners=["@bisman-automations"])
         self.assert_error("codeowners should be")

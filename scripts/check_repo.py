@@ -254,7 +254,9 @@ def check_integration(repo: Path, report: Report) -> tuple[str | None, dict | No
     if "categories" in manifest:
         report.error(rel, "remove 'categories': the published hassfest rejects it")
     if any(
-        str(r).lower().startswith("pillow") for r in manifest.get("requirements", [])
+        # Exact name only: pillow-heif and other Pillow plugins are allowed.
+        re.split(r"[\s<>=!~;\[]", str(r).strip(), maxsplit=1)[0].lower() == "pillow"
+        for r in manifest.get("requirements", [])
     ):
         report.error(
             rel,
